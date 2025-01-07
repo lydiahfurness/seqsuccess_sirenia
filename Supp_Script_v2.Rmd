@@ -1,0 +1,416 @@
+---
+title: "Endogenous DNA fraction of sirenians from historical collections"
+output: html_notebook 'Endogenous DNA fraction'
+---
+
+### This version of the plotting script creates the plots and runs the tests
+### without the extinct species - Hydrodamalis gigas - included in the dataset
+
+Load the packages needed:
+```{r}
+library(readxl)
+library(dplyr)
+library(car)
+library(lme4)
+library(ggplot2)
+library(ggpubr)
+```
+
+Read the data from the excel sheet called Tables_Methods_NEW using readxl
+
+################################################################################
+################################################################################
+################################################################################
+
+There were two individuals that could not confidently be assigned to Sirenia
+They are removed from the study...
+```{r}
+data <- data %>% filter(`aDNA lab ID` != "STM004" & `aDNA lab ID` != "STM017")
+```
+
+VISUALISATION OF DATA
+Use violin and dot plots to visualise endogenous DNA fraction across the
+predictor variables that we are interested in
+
+```{r}
+# Remove SSCs 
+data2 <- data %>% 
+  filter(!`Species` %in% c("Hydrodamalis gigas"))
+summary(data2)
+mean(data2$`Endogenous(fraction)`)
+```
+Mean endogenous DNA fraction is greater (~34%) in this dataset
+
+Plot...
+```{r}
+############################ SPECIES ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+species_stats <- data2 %>% 
+  group_by(`Species`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Species_violin <- ggplot(data2, aes(x=Species, y=`Endogenous(fraction)`, fill = Species)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("skyblue",4)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("Species") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Dugong dugon","Trichechus inunguis", "Trichechus manatus", "Trichechus senegalensis")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = species_stats, aes(x = Species, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Species_violin
+
+############################ SAMPLE TYPE ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+sampletype_stats <- data2 %>% 
+  group_by(`Sample type`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Sampletype_violin <- ggplot(data2, aes(x=`Sample type`, y=`Endogenous(fraction)`, fill = `Sample type`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("pink",2)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 20,
+               binwidth = 0.0001) +
+  xlab("Sample type") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Bone", "Soft tissue")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.2),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 5),
+        axis.text.x = element_text(size=5, angle = 45, vjust = 1, hjust=1),
+        axis.text.y = element_text(size=5)) +
+  geom_text(data = sampletype_stats, aes(x = `Sample type`, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Sampletype_violin
+
+############################ SAMPLE TYPE CLASS ############################
+# Set the desired order...
+data2$`Sample type class` <- factor(data2$`Sample type class`, 
+                                 levels = c("Cranial", "Post-cranial", 
+                                            "Cartilage", "Skin/Hide", "Unknown"))
+# Now get the counts for n
+# AND calculate the number of points and maximum value for each 
+sampletypeclass_stats <- data2 %>% 
+  group_by(`Sample type class`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Sampletypeclass_violin <- ggplot(data2, aes(x=`Sample type class`, y=`Endogenous(fraction)`, fill = `Sample type class`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("palegreen",5)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 20,
+               binwidth = 0.0001) +
+  xlab("Sample type class") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Cranial", "Post-cranial", "Cartilage", "Skin/Hide", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.2),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 5),
+        axis.text.x = element_text(size=5, angle = 45, vjust = 1, hjust=1),
+        axis.text.y = element_text(size=5)) +
+  geom_text(data = sampletypeclass_stats, aes(x = `Sample type class`, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Sampletypeclass_violin
+
+############################ ANATOMY CLASS ############################
+# We need to first remove NA (this is the soft tissue samples)
+Anatomyplotting <-data2 %>% filter(`Anatomy class` != "NA")
+
+# Let's order by most to least mean endogenous
+Anatomyplotting$`Anatomy class` <- factor(Anatomyplotting$`Anatomy class`)
+mean_endogenous <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  summarise(mean_endogenous = mean(`Endogenous(fraction)`)) %>%
+  arrange(desc(mean_endogenous))
+# reorder AND place the "Unknown" category last
+ordered_levels <- mean_endogenous$`Anatomy class`
+if("Unknown" %in% ordered_levels) {
+  ordered_levels <- c(setdiff(ordered_levels, "Unknown"), "Unknown")
+}
+Anatomyplotting$`Anatomy class` <- factor(Anatomyplotting$`Anatomy class`, levels = ordered_levels)
+
+# Now get the counts for n and calculate the number of points and maximum value for each
+anatomyclass_stats <- Anatomyplotting %>% 
+  group_by(`Anatomy class`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Divide data based on the number of points (< 3 or => 3)
+data_few_points <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  filter(n() < 3)
+data_many_points <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  filter(n() >= 3)
+
+# Create the plot using dotplot of entire dataset and then overlay violin plots of the 'many points' data
+Anatomyclass_violin <- ggplot() +
+  geom_dotplot(data = Anatomyplotting, aes(x = `Anatomy class`, y = `Endogenous(fraction)`, fill = `Anatomy class`), binaxis = "y", stackdir = "center", dotsize = 40, binwidth = 0.0003) +
+  geom_violin(data = data_many_points, aes(x = `Anatomy class`, y = `Endogenous(fraction)`, fill = `Anatomy class`), alpha = 0.6, lwd = 0.3) +
+  scale_fill_manual(name = "Endogenous(fraction)", values = rep("orange", 19)) + 
+  xlab("Anatomy class") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels = ordered_levels) +
+  scale_y_continuous(breaks = seq(0.0, 1.0, by = 0.2), limits = c(0.0, 1.0)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 8),
+        axis.text.x = element_text(size = 8, angle = 45, vjust = 1, hjust = 1),
+        axis.text.y = element_text(size=5)) +
+  geom_text(data = anatomyclass_stats, aes(x = `Anatomy class`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Anatomyclass_violin
+
+############################ INSTUTUTION CODE ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+institution_stats <- data2 %>% 
+  group_by(`Institution code`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+
+# We have some categories with too few points create a violin plot so need to divide the data
+# Separate data based on the number of points
+data_few_points <- data2 %>%
+  group_by(`Institution code`) %>%
+  filter(n() < 3)
+
+data_many_points <- data2 %>%
+  group_by(`Institution code`) %>%
+  filter(n() >= 3)
+
+# Create the plot
+Institution_violin <- ggplot() +
+  geom_violin(data = data_many_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), alpha = 0.6, lwd = 0.3) + 
+  geom_dotplot(data = data_many_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), binaxis = "y", stackdir = "center", dotsize = 20, binwidth = 0.0001) + 
+  geom_dotplot(data = data_few_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), binaxis = "y", stackdir = "center", dotsize = 20, binwidth = 0.0001) +
+  scale_fill_manual(name = "Endogenous(fraction)", values = rep("red", 7)) + 
+  xlab("Institution code") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels = c("MCC", "MNHN", "NBC", "NHMO", "NHMUK", "RMCA", "UMB")) +
+  scale_y_continuous(breaks = seq(0.0, 1.0, by = 0.2), limits = c(0.0, 1.0)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 5),
+        axis.text.x = element_text(size = 5, angle = 45, vjust = 1, hjust = 1),
+        axis.text.y = element_text(size=5)) +
+  geom_text(data = institution_stats, aes(x = `Institution code`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Institution_violin
+
+############################ REGION ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+region_stats <- data2 %>% 
+  group_by(`Region`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+
+# Set the order for the regions, with "Unknown" as the last category
+region_order <- c("Amazon", "Caribbean and Gulf of Mexico", "Central Africa", 
+                  "Eastern Indian Ocean", "South America", 
+                  "West Africa", "Western Indian Ocean", "Unknown")
+data2$Region <- factor(data2$Region, levels = region_order)
+
+# Create the plot
+Region_violin <- ggplot(data2, aes(x=Region, y=`Endogenous(fraction)`, fill = Region)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("yellow",8)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 20,
+               binwidth = 0.0001) +
+  xlab("Region") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels= region_order) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.2),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 5),
+        axis.text.x = element_text(size=5, angle = 45, vjust = 1, hjust=1),
+        axis.text.y = element_text(size=5)) +
+  geom_text(data = region_stats, aes(x = `Region`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Region_violin
+
+############################ YEARS B/S 1950 ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+years_stats <- data2 %>% 
+  group_by(`B/S 1950`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+Years_violin <- ggplot(data2, aes(x=`B/S 1950`, y=`Endogenous(fraction)`, fill = `B/S 1950`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("darkgreen",3)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 20,
+               binwidth = 0.0001) +
+  xlab("B/S 1950") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Before","Since", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.2),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size = 8),
+        axis.title.y = element_text(margin = margin(r = 5), size = 5),
+        axis.text.x = element_text(size=5, angle = 45, vjust = 1, hjust=1),
+        axis.text.y = element_text(size = 5)) +
+  geom_text(data = years_stats, aes(x = `B/S 1950`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Years_violin
+
+### Let's try replotting this with the increased detail given in the Year (bins) new column...
+
+############################ YEARS (binned) NEW ############################
+# Set the desired order...
+data2$`Year (bins) new` <- factor(data2$`Year (bins) new`, 
+                                 levels = c( "1800-1899", "1900-1949", 
+                                            "1950-1999", "Pre-1900 Unknown", 
+                                            "Pre-1950 Unknown", "Unknown"))
+# Now get the counts for n
+# AND calculate the number of points and maximum value for each 
+years_stats2 <- data2 %>% 
+  group_by(`Year (bins) new`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+Years_violin2 <- ggplot(data2, aes(x=`Year (bins) new`, y=`Endogenous(fraction)`, fill = `Year (bins) new`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("darkgreen",6)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 20,
+               binwidth = 0.0001) +
+  xlab("Year (bins) new") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("1800-1899", "1900-1949", 
+                            "1950-1999", "Pre-1900 Unknown", 
+                            "Pre-1950 Unknown", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.2),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10), size=8),
+        axis.title.y = element_text(margin = margin(r = 5), size=5),
+        axis.text.x = element_text(size=5, angle = 45, vjust = 1, hjust=1),
+        axis.text.y = element_text(size = 5)) +
+  geom_text(data = years_stats2, aes(x = `Year (bins) new`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 1.5, color = "black", fontface = "italic")
+Years_violin2
+```
+
+Plot the figures - edited hereafter in Adobe Illustrator
+```{r}
+Sampletypesandyearsfig <- ggarrange(Sampletype_violin, Years_violin, Sampletypeclass_violin,Years_violin2,
+                    labels = c("A", "C", "B", "D"),
+                    ncol = 2, nrow = 2)
+Sampletypesandyearsfig
+ggexport(Sampletypesandyearsfig, filename = "Sampletypesandyearsfig.pdf")
+
+instandregionanatomyfig <- ggarrange(
+  Anatomyclass_violin,
+  ggarrange(Institution_violin, Region_violin, ncol = 2, labels = c("F", "G"),
+            widths = c(2, 3)),
+  nrow = 2, 
+  labels = "E",
+  heights = c(3, 2)
+  )
+instandregionanatomyfig
+ggexport(instandregionanatomyfig, filename = "instandregionanatomyfig.pdf")
+```
+
+
+Interpretation:
+Now it seems that endogenous fraction is not vary variable across our extant 
+species. Patterns remain the same across sample type variables and the institution.
+When looking at region now it still seems that, although some variation may exist,
+it doesn't seem significant. In looking at the temporal categories there's no obvious pattern
+and maybe even the pre 1900 material looks to be better!
+
+Test to see if there are significant differences between the time periods
+```{r}
+# Do t.test for Before vs Since 1950
+x <- subset(data2,`B/S 1950` == "Before") 
+y <- subset(data2,`B/S 1950` == "Since")
+t.test(x$`Endogenous(fraction)`,y$`Endogenous(fraction)`, var.equal = FALSE)
+# No significant difference - p-value = 0.1987 (Mean before is actually higher 
+# than mean after)
+
+# Do ANOVA for binned periods
+one.way.aov1 <- aov(`Endogenous(fraction)`~`Year (bins) new`, data = data2)
+summary(one.way.aov1)
+# Filter all unknown categories out...
+filter_years_data1 <- data2 %>% 
+  filter(!`Year (bins) new` %in% c("Unknown", "Pre-1900 Unknown", "Pre-1950 Unknown"))
+one.way.aov2 <- aov(`Endogenous(fraction)`~`Year (bins) new`, data = filter_years_data1)
+summary(one.way.aov2)
+```
+Conclusion: Well there are significant differences when using 1) all bins but not when 
+2) any bins with uncertainty are removed. Therefore there are not any discernible 
+differences i.e., differences we can actually understand
+
+Test to see if there are significant differences within the other major variables
+```{r}
+### Species
+one.way.aov4 <- aov(`Endogenous(fraction)`~`Species`, data = data2)
+summary(one.way.aov4)
+# No significant differences
+
+### Sample type
+bone <- data2 %>% filter(`Sample type` == "Bone")
+soft_tissue <- data2 %>% filter(`Sample type` == "Soft tissue")
+t.test(bone$`Endogenous(fraction)`,soft_tissue$`Endogenous(fraction)`
+       , var.equal = FALSE)
+
+### Sample type class
+# Filter unknown categories out...
+filter_stc_data <- data2 %>% 
+  filter(!`Sample type class` %in% c("Unknown"))
+one.way.aov6 <- aov(`Endogenous(fraction)`~`Sample type class`, data = filter_stc_data)
+summary(one.way.aov6)
+# Significant differences!
+
+### Institution
+one.way.aov7 <- aov(`Endogenous(fraction)`~`Institution code`, data = data2)
+summary(one.way.aov7)
+# No significant differences
+
+### Region
+# Filter unknown out...
+filter_region_data1 <- data2 %>% 
+  filter(!`Region` %in% c("Unknown"))
+one.way.aov8 <- aov(`Endogenous(fraction)`~`Region`, data = filter_region_data1)
+summary(one.way.aov8)
+# No significant differences
+```
+
+ANOVA of anatomy
+```{r}
+Anatomy_aov <-Anatomyplotting %>% filter(`Anatomy class` != "Unknown")
+one.way.aov10 <- aov(`Endogenous(fraction)`~`Anatomy class`, data = Anatomy_aov)
+summary(one.way.aov10)
+# Significant differences!
+```

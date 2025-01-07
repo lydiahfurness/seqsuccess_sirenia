@@ -1,0 +1,779 @@
+---
+title: "Endogenous DNA fraction of sirenians from historical collections"
+output: html_notebook 'Endogenous DNA fraction'
+---
+
+Introduction: In this paper we investigate aDNA sequencing success in a dataset 
+of large, tropical marine mammals –  sirenians – sampled at a variety of 
+European NHCs. We consider 91 samples from 85 specimens comprising five species. 
+We compare sample types, species and region, individual collections, and 
+material age, to assess what contributes most towards the successful sequencing 
+of specimens. Additionally, we explore the potential of soft tissue and more 
+specifically dried cartilage for aDNA research. We make considerations of how 
+these data can inform the aDNA workflow to minimise destruction of natural 
+history and maximise DNA yield.
+
+Note: Hydrodamalis gigas (aka Steller's sea cow) is referred to in this script
+as SSC
+
+Load the packages needed:
+```{r}
+library(readxl)
+library(dplyr)
+library(car)
+library(lme4)
+library(ggplot2)
+library(ggpubr)
+```
+
+Read the data from the excel sheet called Tables_Methods_NEW using readxl
+
+################################################################################
+################################################################################
+################################################################################
+
+COUNTS AND DATA EXPLORATION
+
+First lets get an idea of what the data look like and get some data counts for 
+our predictor variables of interest
+```{r}
+summary(data)
+str(data)
+# Summary for variables
+char_variables <- c("Species", "Sample type", "Sample type class"
+                    , "Anatomy class", "Institution code", "Region", 
+                     "B/S 1950", "Year (bins) new") 
+summary_list <- lapply(data[, char_variables], table)
+print(summary_list)
+
+# Summary of sequencing
+sum(data$`Pair(n)`)
+# we obtained ~6.25 billion paired total sequencing reads
+mean(data$`Length(bp)`)
+# mean read length of 79.1bp
+range(data$`Endogenous(fraction)`)
+# 0.0002-69% endogenous DNA
+range(data$Clonality)
+# 0.02-21% clonality
+range(data$Nu_coverage)
+# nuclear coverage 0-11.32-fold
+count_table <- data %>%
+  filter(`Endogenous(fraction)` >= 0.2)
+(nrow(count_table)/nrow(data))*100
+# ~56% of samples have >20% endogenous
+
+# Now i'll subset the dataframe to only keep the columns we are interested in
+data <- data[, c("aDNA lab ID", "Endogenous(fraction)", 
+                 "Species", "Sample type", "Sample type class", 
+                 "Anatomy class", "Institution code", "Region", 
+                 "B/S 1950", "Year (bins) new")]
+```
+This information is given in Table 1 and Figures 1 and 2 in the manuscript
+
+There were two individuals that could not confidently be assigned to Sirenia
+Remove them...
+```{r}
+data <- data %>% filter(`aDNA lab ID` != "STM004" & `aDNA lab ID` != "STM017")
+```
+
+VISUALISATION OF DATA
+Use violin and dot plots to visualise endogenous DNA fraction across the
+predictor variables that we are interested in
+
+```{r}
+# I'll remove all NAs for the anatomy class plot (this is the soft tissue)
+Anatomyplotting <-data %>% filter(`Anatomy class` != "NA")
+```
+
+Plot...
+```{r}
+############################ SPECIES ############################
+# Set the desired order...
+data$`Species` <- factor(data$`Species`, 
+                                 levels = c("Hydrodamalis gigas", "Dugong dugon", "Trichechus manatus", "Trichechus inunguis", "Trichechus senegalensis"))
+
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+species_stats <- data %>% 
+  group_by(`Species`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Species_violin <- ggplot(data, aes(x=Species, y=`Endogenous(fraction)`, fill = Species)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("skyblue",5)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("Species") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Hydrodamalis gigas","Dugong dugon", "Trichechus manatus", "Trichechus inunguis", "Trichechus senegalensis")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = species_stats, aes(x = Species, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Species_violin
+
+############################ SAMPLE TYPE ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+sampletype_stats <- data %>% 
+  group_by(`Sample type`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Sampletype_violin <- ggplot(data, aes(x=`Sample type`, y=`Endogenous(fraction)`, fill = `Sample type`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("pink",2)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("Sample type") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Bone", "Soft tissue")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = sampletype_stats, aes(x = `Sample type`, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Sampletype_violin
+
+############################ SAMPLE TYPE CLASS ############################
+# Set the desired order...
+data$`Sample type class` <- factor(data$`Sample type class`, 
+                                 levels = c("Cranial", "Post-cranial", 
+                                            "Cartilage", "Skin/Hide", "Unknown"))
+# Now get the counts for n
+# AND calculate the number of points and maximum value for each 
+sampletypeclass_stats <- data %>% 
+  group_by(`Sample type class`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Then make the plot...
+Sampletypeclass_violin <- ggplot(data, aes(x=`Sample type class`, y=`Endogenous(fraction)`, fill = `Sample type class`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("palegreen",5)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("Sample type class") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Cranial", "Post-cranial", "Cartilage", "Skin/Hide", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = sampletypeclass_stats, aes(x = `Sample type class`, y = max_y + 0.1, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Sampletypeclass_violin
+
+############################ ANATOMY CLASS ############################
+# We need to first remove NA (this is the soft tissue samples)
+Anatomyplotting <- data %>% filter(`Anatomy class` != "NA")
+
+# Let's order by most to least mean endogenous
+Anatomyplotting$`Anatomy class` <- factor(Anatomyplotting$`Anatomy class`)
+mean_endogenous <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  summarise(mean_endogenous = mean(`Endogenous(fraction)`)) %>%
+  arrange(desc(mean_endogenous))
+# reorder AND place the "Unknown" category last
+ordered_levels <- mean_endogenous$`Anatomy class`
+if("Unknown" %in% ordered_levels) {
+  ordered_levels <- c(setdiff(ordered_levels, "Unknown"), "Unknown")
+}
+Anatomyplotting$`Anatomy class` <- factor(Anatomyplotting$`Anatomy class`, levels = ordered_levels)
+
+# Now get the counts for n and calculate the number of points and maximum value for each
+anatomyclass_stats <- Anatomyplotting %>% 
+  group_by(`Anatomy class`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+# Divide data based on the number of points (< 3 or => 3)
+data_few_points <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  filter(n() < 3)
+data_many_points <- Anatomyplotting %>%
+  group_by(`Anatomy class`) %>%
+  filter(n() >= 3)
+
+# Create the plot using dotplot of entire dataset and then overlay violin plots of the 'many points' data
+Anatomyclass_violin <- ggplot() +
+  geom_dotplot(data = Anatomyplotting, aes(x = `Anatomy class`, y = `Endogenous(fraction)`, fill = `Anatomy class`), binaxis = "y", stackdir = "center", dotsize = 40, binwidth = 0.0003) +
+  geom_violin(data = data_many_points, aes(x = `Anatomy class`, y = `Endogenous(fraction)`, fill = `Anatomy class`), alpha = 0.6, lwd = 0.3) +
+  scale_fill_manual(name = "Endogenous(fraction)", values = rep("orange", 19)) + 
+  xlab("Anatomy class") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels = ordered_levels) +
+  scale_y_continuous(breaks = seq(0.0, 1.0, by = 0.1), limits = c(0.0, 1.0)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size = 11, angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(data = anatomyclass_stats, aes(x = `Anatomy class`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Anatomyclass_violin
+
+############################ INSTUTUTION CODE ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+institution_stats <- data %>% 
+  group_by(`Institution code`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+
+# We have some categories with too few points create a violin plot so need to divide the data
+# Separate data based on the number of points
+data_few_points <- data %>%
+  group_by(`Institution code`) %>%
+  filter(n() < 3)
+
+data_many_points <- data %>%
+  group_by(`Institution code`) %>%
+  filter(n() >= 3)
+
+# Create the plot
+Institution_violin <- ggplot() +
+  geom_violin(data = data_many_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), alpha = 0.6, lwd = 0.3) + 
+  geom_dotplot(data = data_many_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), binaxis = "y", stackdir = "center", dotsize = 40, binwidth = 0.0003) + 
+  geom_dotplot(data = data_few_points, aes(x = `Institution code`, y = `Endogenous(fraction)`, fill = `Institution code`), binaxis = "y", stackdir = "center", dotsize = 40, binwidth = 0.0003) +
+  scale_fill_manual(name = "Endogenous(fraction)", values = rep("red", 7)) + 
+  xlab("Institution code") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels = c("MCC", "MNHN", "NBC", "NHMO", "NHMUK", "RMCA", "UMB")) +
+  scale_y_continuous(breaks = seq(0.0, 1.0, by = 0.1), limits = c(0.0, 1.0)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size = 11, angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(data = institution_stats, aes(x = `Institution code`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Institution_violin
+
+############################ REGION ############################
+# First, calculate counts for n and max values for each region
+region_stats <- data %>% 
+  group_by(`Region`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+
+# Set the order for the regions, with "Unknown" as the last category
+region_order <- c("Amazon", "Caribbean and Gulf of Mexico", "Central Africa", 
+                  "Eastern Indian Ocean", "North Pacific", "South America", 
+                  "West Africa", "Western Indian Ocean", "Unknown")
+data$Region <- factor(data$Region, levels = region_order)
+
+# Create the plot
+Region_violin <- ggplot(data, aes(x = Region, y = `Endogenous(fraction)`, fill = Region)) +
+  geom_violin(alpha = 0.6, lwd = 0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)", values = rep("yellow", length(region_order))) +
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 40, binwidth = 0.0003) +
+  xlab("Region") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels = region_order) +
+  scale_y_continuous(breaks = seq(0.0, 1.0, by = 0.1), limits = c(0.0, 1.0)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size = 11, angle = 45, vjust = 1, hjust = 1)) +
+  geom_text(data = region_stats, aes(x = `Region`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Region_violin
+
+############################ YEARS B/S 1950 ############################
+# First get the counts for n
+# AND calculate the number of points and maximum value for each 
+years_stats <- data %>% 
+  group_by(`B/S 1950`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+Years_violin <- ggplot(data, aes(x=`B/S 1950`, y=`Endogenous(fraction)`, fill = `B/S 1950`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("darkgreen",5)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("B/S 1950") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Before","Since", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = years_stats, aes(x = `B/S 1950`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Years_violin
+
+### Let's try replotting this with the increased detail given in the Year (bins) new column...
+
+############################ YEARS (binned) NEW ############################
+# Set the desired order...
+data$`Year (bins) new` <- factor(data$`Year (bins) new`, 
+                                 levels = c("Pre-1800", "1800-1899", "1900-1949", 
+                                            "1950-1999", "Pre-1900 Unknown", 
+                                            "Pre-1950 Unknown", "Unknown"))
+# Now get the counts for n
+# AND calculate the number of points and maximum value for each 
+years_stats2 <- data %>% 
+  group_by(`Year (bins) new`) %>% 
+  summarise(n = n(), max_y = max(`Endogenous(fraction)`))
+Years_violin2 <- ggplot(data, aes(x=`Year (bins) new`, y=`Endogenous(fraction)`, fill = `Year (bins) new`)) +
+  geom_violin(alpha=0.6,lwd=0.3) + 
+  scale_fill_manual(name = "Endogenous(fraction)",values = rep("darkgreen",7)) +
+             geom_dotplot(binaxis = "y",
+               stackdir = "center",
+               dotsize = 40,
+               binwidth = 0.0003) +
+  xlab("Year (bins) new") +
+  ylab("Endogenous DNA fraction") +
+  scale_x_discrete(labels=c("Pre-1800", "1800-1899", "1900-1949", 
+                            "1950-1999", "Pre-1900 Unknown", 
+                            "Pre-1950 Unknown", "Unknown")) +
+  scale_y_continuous(breaks = seq(0.0,1.0, by = 0.1),limits = (c(0.0,1.0))) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(size=11, angle = 45, vjust = 1, hjust=1)) +
+  geom_text(data = years_stats2, aes(x = `Year (bins) new`, y = max_y + 0.05, label = paste0("(n = ", n, ")")),
+            vjust = -0.5, size = 2.5, color = "black", fontface = "italic")
+Years_violin2
+```
+
+Interpretation:
+At first glance it looks like endogenous fraction is quite variable across 
+predictors - the only exception seems to be with temporal predictors because 
+there are few differences across binned time periods that are clear to 
+understand.
+Clearly Pre-1800 SSC (Hydrodamalis gigas) is worse than other binned time 
+periods (this is the only obvious pattern) but all 15 samples in this category 
+come from one species (which is not represented in other time periods)
+from a specific region and unique depositional environment...
+
+Test to see if there are significant differences between the time periods
+```{r}
+# Do t.test for Before vs Since 1950
+x <- subset(data,`B/S 1950` == "Before") 
+y <- subset(data,`B/S 1950` == "Since")
+t.test(x$`Endogenous(fraction)`,y$`Endogenous(fraction)`,var.equal = FALSE)
+# No significant difference - p-value = 0.9546 - means are almost identical
+
+# Do ANOVA for binned periods
+one.way.aov1 <- aov(`Endogenous(fraction)`~`Year (bins) new`, data = data)
+summary(one.way.aov1)
+# Filter all unknown categories out...
+filter_years_data1 <- data %>% 
+  filter(!`Year (bins) new` %in% c("Unknown", "Pre-1900 Unknown", "Pre-1950 Unknown"))
+one.way.aov2 <- aov(`Endogenous(fraction)`~`Year (bins) new`, data = filter_years_data1)
+summary(one.way.aov2)
+# Filter SSC category out...
+filter_years_data2 <- filter_years_data1 %>% 
+  filter(!`Year (bins) new` %in% c("Pre-1800 SSC"))
+one.way.aov3 <- aov(`Endogenous(fraction)`~`Year (bins) new`, data = filter_years_data2)
+summary(one.way.aov3)
+```
+Conclusion: The means of each binned subset are significantly different when 
+using 1) all bins 2) all bins except for the 3 with uncertainty of date, BUT in 
+3) once the Pre-1800 SSC (Hydrodamalis gigas) bin is removed there is no longer 
+a significant difference across time periods...
+
+Test to see if there are significant differences between the other variables
+```{r}
+### Species
+one.way.aov4 <- aov(`Endogenous(fraction)`~`Species`, data = data)
+summary(one.way.aov4)
+# Test without Hydrodamalis as this appears to be uniquely bad based on the plot
+filter_sp_data <- data %>% 
+  filter(!`Species` %in% c("Hydrodamalis gigas"))
+one.way.aov5 <- aov(`Endogenous(fraction)`~`Species`, data = filter_sp_data)
+summary(one.way.aov5)
+
+### Sample type class
+# Filter unknown categories out...
+filter_stc_data <- data %>% 
+  filter(!`Sample type class` %in% c("Unknown"))
+one.way.aov6 <- aov(`Endogenous(fraction)`~`Sample type class`, data = filter_stc_data)
+summary(one.way.aov6)
+
+### Institution
+one.way.aov7 <- aov(`Endogenous(fraction)`~`Institution code`, data = data)
+summary(one.way.aov7)
+### Region
+# Filter unknown out...
+filter_region_data1 <- data %>% 
+  filter(!`Region` %in% c("Unknown"))
+one.way.aov8 <- aov(`Endogenous(fraction)`~`Region`, data = filter_region_data1)
+summary(one.way.aov8)
+# Now filter the North Pacific out as this is only made up from the SSC which were shown in the Species ANOVA to affect the result...
+filter_region_data2 <- filter_region_data1 %>% 
+  filter(!`Region` %in% c("North Pacific"))
+one.way.aov9 <- aov(`Endogenous(fraction)`~`Region`, data = filter_region_data2)
+summary(one.way.aov9)
+```
+
+Conclusions: 
+1) There is a significant difference between species BUT only when you include the SSCs - 
+   If you remove them then you see that there is no significant difference between extant sirenian species.
+2) The ANOVA for sample type class demonstrates that there is a significant difference between sample types.
+   (See below section for t.test of bone/soft tissue)
+   This, coupled with the anatomy plot which shows very variable endogenous DNA across all elements
+   sampled, demonstrates that we need to investigate these differences further... 
+3) There is no significant difference between institutions
+4) Region also becomes not significant once the unique North Pacific (SSC) samples are removed (p=0.635)
+
+Clearly the SSC material is unique(ly bad) and i don't want it to impact my interpretation
+of the data or understanding of what it actually is that leads to the successful sequencing
+of historical and archaeological NHC material. This is already an interesting finding in-
+and-of-itself as we usually expect cooler latitudes to yield better DNA preservation than 
+tropical and temperate latitudes. Clearly there is something about the depositional environment
+and/or the subsequent unrecorded treatment of the bones between collection
+and our sampling that made these bones particularly bad for sequencing.
+For this study we will now continue without these SSC data...
+
+I have rewritten all of the plotting and these tests with none of the SSC
+data - it's in the script Supp_Script_v2.Rmd and given in the main manuscript text
+
+This script continues from now without any of the SSC data.
+
+```{r}
+# Remove SSCs 
+data2 <- data %>% 
+  filter(!`Species` %in% c("Hydrodamalis gigas"))
+summary(data2)
+mean(data2$`Endogenous(fraction)`)
+```
+Mean endogenous for data2 is 33.8%
+
+################################################################################
+################################################################################
+################################################################################
+EXPLORATION OF SAMPLE TYPES...
+USE T TESTS TO ASSESS FOR SIGNIFICANT DIFFERENCES BETWEEN DEFINED SUBSETS...
+
+Now lets use a Student's test using the t.test R function to assess if there 
+is a significant difference between endogenous DNA fraction in different sample type subsets
+that we can create from our dataset
+Note: Our sample sizes are not equal so we will use var.equal=FALSE
+
+CRANIAL VS POSTCRANIAL BONE
+```{r}
+cranial <- data2 %>% filter(`Sample type class` == "Cranial")
+postcranial <- data2 %>% filter(`Sample type class` == "Post-cranial")
+
+t.test(cranial$`Endogenous(fraction)`,postcranial$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+Cranial and postcranial bone are significantly different based on t.test
+
+IS PETROUS BONE BETTER THAN TYMPANIC?
+```{r}
+petrous <- data2 %>% filter(`Anatomy class` == "Petrous")
+tympanic <- data2 %>% filter(`Anatomy class` == "Tympanic")
+
+t.test(petrous$`Endogenous(fraction)`,tympanic$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+Petrous and tympanic are not significantly different based on t.test
+
+IS PETROUS BONE BETTER THAN ALL OTHER TYPES OF BONE?
+```{r}
+all_other <- data2 %>% filter(`Sample type` == "Bone")
+# remove the ambiguous PT category so as not to confound
+all_other <- all_other %>% filter(`Anatomy class` != "Petrous" & 
+                                    `Anatomy class` != "PT")
+
+t.test(petrous$`Endogenous(fraction)`,all_other$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+Petrous bone is not significantly better based on t.test
+
+WHAT ABOUT PETROUS COMPARED ONLY TO THE REST OF THE CRANIUM?
+```{r}
+# remove ambiguous PT category so as not to confound
+cranial_wout_petrous <- cranial %>% filter(`Anatomy class` != "Petrous" & 
+                                             `Anatomy class` != "PT")
+t.test(petrous$`Endogenous(fraction)`,cranial_wout_petrous$
+         `Endogenous(fraction)`, var.equal = FALSE)
+```
+Petrous bone is not significantly better when only comparing within the cranium 
+
+WHAT ABOUT PETROUS AND TYMPANIC COMPARED TO THE REST OF THE CRANIUM...?
+```{r}
+cranial_wout_PT <- cranial %>% filter(`Anatomy class` != "Petrous" & 
+                                        `Anatomy class` != "Tympanic" & 
+                                        `Anatomy class` != "PT")
+PT <- cranial %>% filter(`Anatomy class` == "Petrous" | 
+                           `Anatomy class` == "Tympanic" | 
+                           `Anatomy class` == "PT")
+t.test(PT$`Endogenous(fraction)`,cranial_wout_PT$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+Highly significantly different!
+
+...AND TO THE REST OF THE SKELETON?
+```{r}
+skeleton_wout_PT <- data %>% filter(`Sample type` == "Bone")
+skeleton_wout_PT <- data %>% filter(`Anatomy class` != "Petrous" & 
+                                        `Anatomy class` != "Tympanic" & 
+                                        `Anatomy class` != "PT")
+t.test(PT$`Endogenous(fraction)`,skeleton_wout_PT$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+Even more highly significantly different!
+
+LET'S JUST SEE WHAT WE GET IF WE TRY THIS WITH TYMPANIC INSTEAD...
+```{r}
+all_other2 <- data2 %>% filter(`Sample type` == "Bone")
+# remove ambiguous PT category so as not to confound
+all_other2 <- all_other2 %>% filter(`Anatomy class` != "Tympanic" & 
+                                    `Anatomy class` != "PT")
+# to the entire rest of the skeleton...
+t.test(tympanic$`Endogenous(fraction)`,all_other$`Endogenous(fraction)`
+       , var.equal = FALSE)
+# just within the cranium...
+cranial_wout_tympanic <- cranial %>% filter(`Anatomy class` != "Tympanic" & 
+                                             `Anatomy class` != "PT")
+t.test(tympanic$`Endogenous(fraction)`,cranial_wout_tympanic$
+         `Endogenous(fraction)`, var.equal = FALSE)
+```
+No significant difference...
+
+What's going on here clearly requires further investigation to be untangled further
+... It's the PT category unfortunately driving this significant difference
+
+HOW DO BONE AND SOFT TISSUE COMPARE?
+```{r}
+# Bone versus soft tissue
+bone <- data2 %>% filter(`Sample type` == "Bone")
+soft_tissue <- data2 %>% filter(`Sample type` == "Soft tissue")
+t.test(bone$`Endogenous(fraction)`,soft_tissue$`Endogenous(fraction)`
+       , var.equal = FALSE)
+# Bone versus cartilage only
+cartilage <- data2 %>% filter(`Sample type class` == "Cartilage")
+t.test(bone$`Endogenous(fraction)`,cartilage$`Endogenous(fraction)`
+       , var.equal = FALSE)
+
+```
+No significant differences
+
+Out of interest...because the distribution for soft tissues is noticably bimodal...
+HOW DO THE TWO HIGH YIELD SOFT TISSUE SAMPLES IMPACT OUR TESTS?
+```{r}
+soft_tissue_modified <- soft_tissue %>% filter(`aDNA lab ID` != "STM018" &
+                                                 `aDNA lab ID` != "SAF023")
+mean(soft_tissue_modified$`Endogenous(fraction)`)
+t.test(bone$`Endogenous(fraction)`,soft_tissue_modified$`Endogenous(fraction)`
+       , var.equal = FALSE)
+```
+When they are removed there is a significant difference - so soft tissue seems to 
+be quite highly variable in endogenous DNA yield... without these two potentially
+exceptional samples the difference in means is 10-fold.
+
+ANOVA of anatomy
+```{r}
+Anatomy_aov <-Anatomyplotting %>% filter(`Anatomy class` != "Unknown")
+Anatomy_aov <-Anatomy_aov %>% filter(`Species` != "Hydrodamalis gigas")
+one.way.aov10 <- aov(`Endogenous(fraction)`~`Anatomy class`, data = Anatomy_aov)
+summary(one.way.aov10)
+```
+
+Interpretation:
+So far it looks like 1) Cranial bone has greater sequencing success than post-
+cranial bone, and 2) Petrous AND tympanic together show a significant difference in 
+sequencing success when compared to other subsets - but further exploration is 
+needed to tease apart any significant differences within the earbone complex as 
+individually we found no significant differences...
+4) there is not a significant difference when comparing bone and soft tissue...
+5) I think most of the variation is coming from within the anatomy types but this is 
+difficult to fully understand based on our sample size
+
+################################################################################
+################################################################################
+################################################################################
+
+USING A LINEAR REGRESSION MODEL, ASSESS WHICH VARIABLES ARE MOST INFLUENTIAL
+IN DETERMINING SEQUENCING SUCCESS
+
+```{r}
+# Convert "Unknown" to NA and "NA" text to R readable NA, then...
+# convert all categorical predictor variables to 
+# factors and check data structure
+data3 <- data2 %>%
+  mutate(across(c(Species, `Sample type`, `Sample type class`, `Anatomy class`, 
+                  `Institution code`, `Region`, `B/S 1950`, `Year (bins) new`), 
+                ~ na_if(., "Unknown"))) %>%
+  mutate(across(where(is.character), ~ na_if(., "NA")),
+         Species = factor(Species),
+         `Sample type` = factor(`Sample type`),
+         `Sample type class` = factor(`Sample type class`),
+         `Anatomy class` = factor(`Anatomy class`),
+         `Institution code` = factor(`Institution code`),
+         `Region` = factor(`Region`),
+         `B/S 1950` = factor(`B/S 1950`),
+         `Year (bins) new` = factor(`Year (bins) new`))
+
+summary(data3)
+
+# Cross check to confirm correct columns have NA
+sapply(data3, function(x) any(x == "NA"))
+```
+
+Let's see how endogenous fraction is varying across the skeleton and
+between sample types...
+```{r}
+### SAMPLE TYPE
+anatomymodel1 <- lm(data = data3, `Endogenous(fraction)` ~ `Sample type`)
+summary(anatomymodel1)
+# the model is significant (p = 0.02567) but on the whole only explains around
+# 5% of the variation in endogenous fraction
+# Soft tissue samples have an estimated -0.19213 lower mean compared to bone
+
+### SAMPLE TYPE CLASS
+anatomymodel2 <- lm(data = data3, `Endogenous(fraction)` ~ `Sample type class`)
+summary(anatomymodel2)
+# Cranial has a statistically significant positive effect (p = 0.0194)
+# the model overall is significant (p-value: 0.01761) and has greater explanatory
+# power than the previous model (~9% of variation explained by this predictor) 
+# appears to be a better overall fit for the data - the more levels in this 
+# model provide a more nuanced analysis - the model also has lower residual 
+# standard error
+
+### ANATOMY CLASS
+# now lets look at anatomy more specifically...
+# this was difficult to gauge from the plot as we have so many different 
+# categories
+anatomymodel3 <- lm(data = data3, `Endogenous(fraction)` ~ `Anatomy class`)
+summary(anatomymodel3)
+# in this model the spread in the residuals (from -0.39768 to 0.27132) is 
+# tighter than in the previous models, suggesting that the model predictions 
+# align closely with the observed data
+# PT is a significantly positive predictor (p value = 0.0161) and petrous alone 
+# is marginally significant (>0.1)
+# the model is statistically significant (p-value: 0.02541) and explains far
+# more of the variation in endogenous fraction (Adjusted R-squared:  0.2571) 
+# than the previous models (although some explanatory power is lost due to high
+# number of predictor levels - Multiple R-squared:  0.4772) - therefore although
+# the model is significant many predictor levels are not contributing significantly
+# increased complexity may be detrimental - 21 observations were also deleted 
+# due to missingness
+```
+
+For fine scale effects the third model may provide more insights and greater detail
+but for overall interpretability the second is likely better for our analysis
+
+Check the other predictor variables INDIVIDUALLY...
+```{r}
+species_model <- lm(data = data3, `Endogenous(fraction)` ~ `Species`)
+summary(species_model)
+# model does nothing for explaining the variation in endogenous fraction
+# F-statistic: 0.7409 on 3 and 72 DF,  p-value: 0.5311
+
+institution_model <- lm(data = data3, `Endogenous(fraction)` ~ `Institution code`)
+summary(institution_model)
+# The model explains around 5% of the variation observed
+# Overall it is not significant (F-statistic: 1.789 on 6 and 69 DF,  p-value: 0.1141)
+# however, significance of individual levels NHMO + NHMUK (P VALUE >0.05) 
+# suggests that, although the model itself is not significant, there is 
+# significant variation between levels that we might explore further...
+
+region_model <- lm(data = data3, `Endogenous(fraction)` ~ `Region`)
+summary(region_model)
+# model does nothing for explaining the variation in endogenous fraction
+# F-statistic: 0.7198 on 6 and 64 DF,  p-value: 0.6351
+
+time_model_1 <- lm(data = data3, `Endogenous(fraction)` ~ `B/S 1950`)
+summary(time_model_1)
+# there is a slight but non-significant decrease between before and since 1950
+# and overall the model does little for explaining the variation in endogenous 
+# fraction - F-statistic: 1.832 on 1 and 52 DF,  p-value: 0.1818
+
+time_model_2 <- lm(data = data3, `Endogenous(fraction)` ~ `Year (bins) new`)
+summary(time_model_2)
+# F-statistic: 2.431 on 4 and 49 DF,  p-value: 0.05992
+# As above model...
+```
+
+TEST FIT A MODEL WITH MULTIPLE PREDICTORS
+Fit the model with the main predictors that seem so far like they 
+could be impactful on the success of sequencing
+```{r}
+model <- lm(data = data3, `Endogenous(fraction)` ~ `Sample type class` + 
+              `Anatomy class` + `Institution code`)
+summary(model)
+drop1(model)
+
+# USING CAR PACKAGE - vif() function - TO MEASURE VIFs
+vif(model)
+# cannot calculate due to aliased coefficients
+alias(model)
+# there are many!
+```
+
+Interpretation: Can't use all 3 predictors (unsurprisingly!) due to aliased 
+coefficients - losing too many data points...
+
+I'll try simplifying the model and measuring collinearity...
+```{r}
+model2 <- lm(data = data3, `Endogenous(fraction)` ~ `Sample type class` + 
+               `Institution code`)
+summary(model2)
+vif(model2)
+
+model3 <- lm(data = data3, `Endogenous(fraction)` ~ `Anatomy class` + 
+               `Institution code`)
+summary(model3)
+vif(model3)
+```
+
+Intrpretation:
+The first model explains far less of the variance - adjusted R2: 14.5% vs 51% 
+in endogenous DNA fraction. The second model has a lower residual standard error
+indicating a better fit to the data. Both are statistically significant:
+Model 2: F-statistic: 2.375 on 9 and 64 DF,  p-value: 0.02188
+Model 3: F-statistic: 3.686 on 21 and 33 DF,  p-value: 0.000406
+... model 3 is however, very highly statistically significant.
+All GVIF values are below 2 which suggests that there is no significant 
+multicollinearity. 
+HOWEVER: The 21 deleted observations in model 3 may be introducing bias into the
+dataset - the differences in individual levels for institution seem very 
+different when comparing the two models which is suspicious.
+
+Look at model 2 again:
+```{r}
+summary(model2)
+vif(model2)
+anova(model2)
+drop1(model2, test = "Chisq")
+```
+Single term deletions:
+Although Institution might be a predictor of 
+interest, it is only removal of Sample type class that will significantly 
+worsen the fit of the model (F = 3.8042, p-value = 0.01421).
+
+Akaike Information Criterion (AIC) and RSS:
+The full model, including both predictors has an AIC of -210.53 and RSS of 3.2833.
+With Sample type class removed, RSS increased (3.7707) and AIC worsened to -206.28, 
+a highly significant (p-value = 0.01662) change. By contrast, with Institution 
+code removed RSS increased very little (3.7945) and AIC increased slightly
+to -211.82 (p-value = 0.09783). In all this suggests that Sample type class is the 
+significant predictor in the model, and that Institution code can be removed to simplify 
+the model.
